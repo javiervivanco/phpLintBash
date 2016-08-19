@@ -54,3 +54,5 @@ Lint all files recursively of specified directory without exclude directory
 #### Requires: 
 * PHP
 * Bash
+
+Based on njoannidi/phpLintBash

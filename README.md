@@ -22,6 +22,10 @@ $ phpLint [directory]
 
 Lint all files recursively of specified directory
 
+$ phpLint -e [exclude directory] -e [exclude directory] [directory]
+
+Lint all files recursively of specified directory without exclude directory
+
 ### Overview:
   
 * Will return a pass / fail

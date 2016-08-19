@@ -1,6 +1,8 @@
 #!/bin/bash
 # Requires: PHP
 
+version=1.0
+
 show_help() {
 cat << EOF
 Usage: ${0##*/} [-he] [directory]
@@ -9,6 +11,7 @@ Lint all files recursively of specified directory
 
     -h              display this help and exit
     -e              Exclude dir
+    -v              version
     directory       specified directory
 
 Overview:
@@ -42,8 +45,12 @@ EOF
 
 excludeDir=''
 
-while getopts "he:" opt; do
+while getopts "hve:" opt; do
     case "$opt" in
+        v)
+            echo -e "${0##*/} Version $version"
+            exit 0
+            ;;
         h)
             show_help
             exit 0

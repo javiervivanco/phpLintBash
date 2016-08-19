@@ -1,43 +1,69 @@
 #!/bin/bash
 # Requires: PHP
 
-# Usage:
-# 
-# ./phpLint
-# 
-# Lint all files recursively in defaultDir 
- 	
+show_help() {
+cat << EOF
+Usage: ${0##*/} [-he] [directory]
+Example: ${0##*/} -e app/cache -e vendor src
+Lint all files recursively of specified directory
+
+    -h              display this help and exit
+    -e              Exclude dir
+    directory       specified directory
+
+Overview:
+  
+- Will return a pass / fail
+- Will only pass if all files pass
+- Any errors will be output in addition to the file they were found in
+
+Scope:
+  - This is a syntax checker. It will not run methods and check for correct returns
+  - It is not a static analysis tool. Code quality / specs are not enforced or searched for
+
+Caveats and Best Practice:
+  - The nature of PHP's lint operation is to abort linting of a file once an error has been found, so...
+      - If a file has multiple errors you will only be notified of the first error
+      - Run until you're error-free
+      - Although linting of the current file may have stopped due to a syntax error,
+          linting of any remaining files in the queue will continue.
+
+Scripting / Deployment Usage:
+  - This will return proper exit codes so it can be used for scripting deployments, etc.
+      - Pass
+          - Exit 0 (clean)
+          - Output on stdin
+      - Fail
+          - Exit 1
+          - Output on stderr
+
+EOF
+}
+
+excludeDir=''
+
+while getopts "he:" opt; do
+    case "$opt" in
+        h)
+            show_help
+            exit 0
+            ;;
+        e)  excludeDir+=" $OPTARG"
+            ;;
+        '?')
+            show_help >&2
+            exit 1
+            ;;
+    esac
+done
+shift "$((OPTIND-1))" # Shift off the options and optional --.
+
 defaultDir='./'
 
 # ./phpLint [directory]
 # 
 # Lint all files recursively of specified directory
 
-# Overview:
-#   
-# - Will return a pass / fail
-# - Will only pass if all files pass
-# - Any errors will be output in addition to the file they were found in
-
-# Scope:
-# 	- This is a syntax checker. It will not run methods and check for correct returns
-# 	- It is not a static analysis tool. Code quality / specs are not enforced or searched for
-
-# Caveats and Best Practice:
-# 	- The nature of PHP's lint operation is to abort linting of a file once an error has been found, so...
-# 		- If a file has multiple errors you will only be notified of the first error
-# 		- Run until you're error-free
-# 		- Although linting of the current file may have stopped due to a syntax error,
-# 			linting of any remaining files in the queue will continue.
-
-# Scripting / Deployment Usage:
-# 	- This will return proper exit codes so it can be used for scripting deployments, etc.
-# 		- Pass
-# 			- Exit 0 (clean)
-# 			- Output on stdin
-# 		- Fail
-# 			- Exit 1
-# 			- Output on stderr
  
 # Colors
 green='\e[32m' 
@@ -52,44 +78,77 @@ endColor='\e[0m'
 
 # Commandline Argument support
 if [[ ${#1} > 0 ]]; then
-	searchDir=${1}
+    searchDir=$(readlink -e ${1})
 else
-	searchDir=${defaultDir}
+    searchDir=$(readlink -e ${defaultDir})
 fi
-
+optExcludeDir=''
 echo -e "\n${underline}Linting PHP in: ${yellow}${searchDir}${endColor}\n"
 
+if [ ! -z "$excludeDir" ]; then
+    for exclDir in $excludeDir
+    do
+        exclDir=$(readlink -e  $exclDir)
+        echo $exclDir
+        optExcludeDir="$optExcludeDir -not \( -path \"$exclDir\" -prune \)"
+    done;
+    echo -e "Exclude: ${red}${excludeDir}${endColor}\n"
+fi
 # Initial Counts
 filesFailed=0
 filesPassed=0
 filesChecked=0
- 
-for entry in `find ${searchDir} -name '*.php'` 
+errorLog=''
+cmd_list_files="find ${searchDir} ${optExcludeDir} -type f  -name \"*.php\" -print"
+
+list_files=$(echo "$cmd_list_files"|bash)
+
+show_error_php() {
+    dirbase=$(dirname $searchDir)
+    entry=$1
+    entryFile="${entry/$dirbase\//}"
+    errorLog="$errorLog\n${yellow}${entryFile}${red} [Failed]${endColor}"
+    error_php=$(php -l $entry 2>&1)
+    line_errors="Errors parsing $entry"
+    line_error_in="in $entry "
+    line_error_parsePHPv53="PHP Parse error:  syntax error, "
+    line_error_parsePHPv54="Parse error: syntax error, "
+    error_php="${error_php/$line_errors/}"
+    error_php="${error_php/$line_error_in/}"
+    error_php="${error_php/$line_error_parsePHPv53/}"
+    error_php="${error_php/$line_error_parsePHPv54/}"
+    errorLog="$errorLog\n$error_php";
+}
+
+for entry in $list_files 
 do
-	# May want to add support for specifying PHP path
-	# Tosses out regular output, we only care about errors.
-	currLint=`php -l $entry 2>&1 1>/dev/null`
-	if [[ ${#currLint} == 0 ]]; then
-		((filesPassed++))
-	else
-		echo -e "${red}Failed: ${yellow}${entry}${endColor}"
-		echo -e "${currLint}\n"
-		((filesFailed++))
-	fi
-	((filesChecked++))
+    # May want to add support for specifying PHP path
+    # Tosses out regular output, we only care about errors.
+    currLint=`php -l $entry 2>&1 1>/dev/null`
+    if [[ $? == 0 ]]; then
+        ((filesPassed++))
+        printf '.'
+    else
+        printf "${red}x${endColor}"
+        show_error_php $entry
+        ((filesFailed++))
+    fi
+    ((filesChecked++))
 done
 
+echo -e "\n(End)"
+echo -e "$errorLog"
 echo -e "${filesChecked} Checked"
 echo -e "${filesPassed} Passed"
 echo -e "${filesFailed} Failed"
 
 # Output a nice Pass / Fail
 if [[ ${filesFailed} > 0 ]]; then
-	>&2 echo -e "\n${red}Fail${endColor}\n"
-	exit 1
+    >&2 echo -e "\n${red}Fail${endColor}\n"
+    exit 1
 else
-	echo -e "\n${green}Pass${endColor}\n"
-	exit 0
+    echo -e "\n${green}Pass${endColor}\n"
+    exit 0
 fi
 
 ${endColor}

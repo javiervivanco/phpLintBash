@@ -1,6 +1,6 @@
 {
-    "name": "njoannidi/php-lint-bash",
-    "description": "A short bash script to recursively lint PHP files with a nice output",
+    "name": "javiervivanco/php-lint-bash",
+    "description": "A short bash script to recursively lint PHP files with a nice output. Based on njoannidi/phpLintBash",
     "version": "0.0.1",
     "keywords": ["lint", "linting", "syntax", "CI", "error checking", "error", "recursive"],
     "require": {
